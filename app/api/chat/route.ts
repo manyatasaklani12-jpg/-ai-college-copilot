@@ -2,10 +2,21 @@
 
 type Message = { role: "user" | "ai"; text: string };
 
-const SYSTEM_PROMPT = `You are AI College Copilot.\n\nRules:\n- Answer the user's question directly.\n- Do NOT ask for their branch, year, or college unless absolutely necessary.\n- Be friendly and conversational.\n- If the user says "hi", simply greet them back.\n- Give concise answers.\n- Do not interview the user.\n- Help with studies, coding, projects, placements, and general questions.\n\n`;
+const SYSTEM_PROMPT = `You are AI College Copilot.
+
+Rules:
+- Answer the user's question directly.
+- Do NOT ask for their branch, year, or college unless absolutely necessary.
+- Be friendly and conversational.
+- If the user says "hi", simply greet them back.
+- Give concise answers.
+- Do not interview the user.
+- Help with studies, coding, projects, placements, and general questions.
+`;
 
 function buildPrompt(history: Message[]) {
   const trimmedHistory = history.slice(-12);
+
   let prompt = SYSTEM_PROMPT;
 
   for (const message of trimmedHistory) {
@@ -17,6 +28,7 @@ function buildPrompt(history: Message[]) {
   }
 
   prompt += "Assistant: ";
+
   return prompt;
 }
 
@@ -34,17 +46,57 @@ export async function POST(req: Request) {
 
     const prompt = buildPrompt(history);
 
-    const response = await fetch("http://localhost:11434/api/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama3.2",
-        prompt,
-        stream: false,
-      }),
-    });
+    // Use OpenRouter when the API key is available
+    if (process.env.OPENROUTER_API_KEY) {
+      const response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "meta-llama/llama-3.2-3b-instruct:free",
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenRouter returned ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      const reply =
+        data?.choices?.[0]?.message?.content ||
+        "Sorry, I couldn't generate a response.";
+
+      return NextResponse.json({ reply });
+    }
+
+    // Local fallback for development
+    const response = await fetch(
+      "http://localhost:11434/api/generate",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama3.2",
+          prompt,
+          stream: false,
+        }),
+      }
+    );
 
     if (!response.ok) {
       throw new Error(`Ollama returned ${response.status}`);
@@ -52,12 +104,14 @@ export async function POST(req: Request) {
 
     const data = await response.json();
 
-    return NextResponse.json({ reply: data.response });
-  } catch (error: any) {
-    console.error("Ollama Error:", error);
     return NextResponse.json({
-      reply:
-        "Sorry, I couldn't connect to the local AI model. Make sure Ollama is running with 'ollama run llama3.2'.",
+      reply: data.response,
+    });
+  } catch (error) {
+    console.error("AI Error:", error);
+
+    return NextResponse.json({
+      reply: "Sorry, I couldn't connect to the AI service right now.",
     });
   }
 }
