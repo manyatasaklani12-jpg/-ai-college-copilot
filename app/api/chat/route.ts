@@ -46,19 +46,21 @@ export async function POST(req: Request) {
 
     const prompt = buildPrompt(history);
 
-    // Check that Vercel has the OpenRouter API key
+    // Make sure the OpenRouter key exists
     if (!process.env.OPENROUTER_API_KEY) {
       throw new Error("OPENROUTER_API_KEY is missing in Vercel");
     }
 
-    // OpenRouter
+    // Send request to OpenRouter
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "HTTP-Referer": "https://ai-college-copilot-red.vercel.app",
+          "X-Title": "AI College Copilot",
         },
         body: JSON.stringify({
           model: "meta-llama/llama-3.2-3b-instruct:free",
@@ -74,6 +76,7 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
       const errorText = await response.text();
+
       throw new Error(
         `OpenRouter returned ${response.status}: ${errorText}`
       );
