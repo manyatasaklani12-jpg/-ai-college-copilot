@@ -46,67 +46,46 @@ export async function POST(req: Request) {
 
     const prompt = buildPrompt(history);
 
-    // Use OpenRouter when the API key is available
-    if (process.env.OPENROUTER_API_KEY) {
-      const response = await fetch(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: "meta-llama/llama-3.2-3b-instruct:free",
-            messages: [
-              {
-                role: "user",
-                content: prompt,
-              },
-            ],
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`OpenRouter returned ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-
-      const reply =
-        data?.choices?.[0]?.message?.content ||
-        "Sorry, I couldn't generate a response.";
-
-      return NextResponse.json({ reply });
+    // Check that Vercel has the OpenRouter API key
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is missing in Vercel");
     }
 
-    // Local fallback for development
+    // OpenRouter
     const response = await fetch(
-      "http://localhost:11434/api/generate",
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "llama3.2",
-          prompt,
-          stream: false,
+          model: "meta-llama/llama-3.2-3b-instruct:free",
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
         }),
       }
     );
 
     if (!response.ok) {
-      throw new Error(`Ollama returned ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(
+        `OpenRouter returned ${response.status}: ${errorText}`
+      );
     }
 
     const data = await response.json();
 
-    return NextResponse.json({
-      reply: data.response,
-    });
+    const reply =
+      data?.choices?.[0]?.message?.content ||
+      "Sorry, I couldn't generate a response.";
+
+    return NextResponse.json({ reply });
   } catch (error) {
     console.error("AI Error:", error);
 
